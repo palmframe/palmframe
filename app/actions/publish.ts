@@ -1,9 +1,10 @@
 'use server'
 
 import { Duration, ms } from '@/lib/duration'
-import { Sandbox } from '@e2b/code-interpreter'
-import { kv } from '@vercel/kv'
+import { SandboxProviderFactory, getProviderName } from '@/lib/sandbox-provider'
 import { customAlphabet } from 'nanoid'
+import { db } from '@/lib/db'
+import { shortUrls } from '@/lib/db/schema'
 
 const nanoid = customAlphabet('1234567890abcdef', 7)
 
@@ -14,9 +15,18 @@ export async function publish(
   teamID: string | undefined,
   accessToken: string | undefined,
 ) {
+  const provider = getProviderName()
   const parsedUrl = new URL(url)
-  if (!parsedUrl.hostname.endsWith('.e2b.app')) {
-    throw new Error('URL must be on *.e2b.app domain')
+
+  // Validate URL based on provider
+  if (provider === 'e2b') {
+    if (!parsedUrl.hostname.endsWith('.e2b.app')) {
+      throw new Error('URL must be on *.e2b.app domain')
+    }
+  } else if (provider === 'daytona') {
+    if (!parsedUrl.hostname.endsWith('.daytona.app')) {
+      throw new Error('URL must be on *.daytona.app domain')
+    }
   }
 
   const expiration = ms(duration)
@@ -24,7 +34,8 @@ export async function publish(
     throw new Error('Expiration must be 24 hours or less')
   }
 
-  await Sandbox.setTimeout(sbxId, expiration, {
+  // Set timeout using provider-specific logic
+  await SandboxProviderFactory.setTimeout(sbxId, expiration, {
     ...(teamID && accessToken
       ? {
           headers: {
@@ -35,18 +46,16 @@ export async function publish(
       : {}),
   })
 
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const id = nanoid()
-    await kv.set(`fragment:${id}`, url, { px: expiration })
-
-    return {
-      url: process.env.NEXT_PUBLIC_SITE_URL
-        ? `https://${process.env.NEXT_PUBLIC_SITE_URL}/s/${id}`
-        : `/s/${id}`,
-    }
-  }
+  const id = nanoid()
+  await db.insert(shortUrls).values({
+    id,
+    url,
+    createdAt: new Date(),
+  })
 
   return {
-    url,
+    url: process.env.NEXT_PUBLIC_SITE_URL
+      ? `https://${process.env.NEXT_PUBLIC_SITE_URL}/s/${id}`
+      : `/s/${id}`,
   }
 }

@@ -1,24 +1,22 @@
 'use client'
 
-import { ViewType } from '@/components/auth'
-import { AuthDialog } from '@/components/auth-dialog'
 import { Chat } from '@/components/chat'
 import { ChatInput } from '@/components/chat-input'
 import { ChatPicker } from '@/components/chat-picker'
-import { ChatSettings } from '@/components/chat-settings'
 import { NavBar } from '@/components/navbar'
 import { Preview } from '@/components/preview'
-import { useAuth } from '@/lib/auth'
+import { Sidebar } from '@/components/sidebar/sidebar'
+import { useAuth } from '@/lib/hooks/use-auth'
+import { useWorkspace } from '@/lib/hooks/use-workspace'
+import { useAutoSave } from '@/lib/hooks/use-auto-save'
 import { Message, toAISDKMessages, toMessageImage } from '@/lib/messages'
 import { LLMModelConfig } from '@/lib/models'
 import modelsList from '@/lib/models.json'
 import { FragmentSchema, fragmentSchema as schema } from '@/lib/schema'
-import { supabase } from '@/lib/supabase'
 import templates from '@/lib/templates'
 import { ExecutionResult } from '@/lib/types'
 import { DeepPartial } from 'ai'
 import { experimental_useObject as useObject } from 'ai/react'
-import { usePostHog } from 'posthog-js/react'
 import { SetStateAction, useEffect, useState } from 'react'
 import { useLocalStorage } from 'usehooks-ts'
 
@@ -28,61 +26,36 @@ export default function Home() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>(
     'auto',
   )
-  const [languageModel, setLanguageModel] = useLocalStorage<LLMModelConfig>(
-    'languageModel',
-    {
-      model: 'claude-sonnet-4-20250514',
-    },
-  )
-
-  const posthog = usePostHog()
+  const languageModel: LLMModelConfig = {
+    model: 'devstral-small-latest',
+  }
 
   const [result, setResult] = useState<ExecutionResult>()
   const [messages, setMessages] = useState<Message[]>([])
   const [fragment, setFragment] = useState<DeepPartial<FragmentSchema>>()
   const [currentTab, setCurrentTab] = useState<'code' | 'fragment'>('code')
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
-  const [isAuthDialogOpen, setAuthDialog] = useState(false)
-  const [authView, setAuthView] = useState<ViewType>('sign_in')
   const [isRateLimited, setIsRateLimited] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  const { session, userTeam } = useAuth(setAuthDialog, setAuthView)
-  const [useMorphApply, setUseMorphApply] = useLocalStorage(
-    'useMorphApply',
-    process.env.NEXT_PUBLIC_USE_MORPH_APPLY === 'true',
+  const { session, userTeam } = useAuth(
+    () => {},
+    () => {},
   )
 
-  const filteredModels = modelsList.models.filter((model) => {
-    if (process.env.NEXT_PUBLIC_HIDE_LOCAL_MODELS) {
-      return model.providerId !== 'ollama'
-    }
-    return true
-  })
+  // Workspace context for projects/sessions
+  const { currentSessionId, currentProjectId, createNewSession } = useWorkspace()
 
-  const defaultModel = filteredModels.find(
-    (model) => model.id === 'claude-sonnet-4-20250514',
-  ) || filteredModels[0]
+  // Auto-save messages to database
+  useAutoSave(currentSessionId, messages)
 
-  const currentModel = filteredModels.find(
-    (model) => model.id === languageModel.model,
-  ) || defaultModel
-
-  // Update localStorage if stored model no longer exists
-  useEffect(() => {
-    if (languageModel.model && !filteredModels.find((m) => m.id === languageModel.model)) {
-      setLanguageModel({ ...languageModel, model: defaultModel.id })
-    }
-  }, [languageModel.model])
+  const currentModel = modelsList.models[0]
   const currentTemplate =
     selectedTemplate === 'auto'
       ? templates
       : { [selectedTemplate]: templates[selectedTemplate] }
   const lastMessage = messages[messages.length - 1]
 
-  // Determine which API to use based on morph toggle and existing fragment
-  const shouldUseMorph =
-    useMorphApply && fragment && fragment.code && fragment.file_path
-  const apiEndpoint = shouldUseMorph ? '/api/morph-chat' : '/api/chat'
+  const apiEndpoint = '/api/chat'
 
   const { object, submit, isLoading, stop, error } = useObject({
     api: apiEndpoint,
@@ -100,9 +73,6 @@ export default function Home() {
         // send it to /api/sandbox
         console.log('fragment', fragment)
         setIsPreviewLoading(true)
-        posthog.capture('fragment_generated', {
-          template: fragment?.template,
-        })
 
         const response = await fetch('/api/sandbox', {
           method: 'POST',
@@ -116,7 +86,6 @@ export default function Home() {
 
         const result = await response.json()
         console.log('result', result)
-        posthog.capture('sandbox_created', { url: result.url })
 
         setResult(result)
         setCurrentPreview({ fragment, result })
@@ -171,10 +140,6 @@ export default function Home() {
   async function handleSubmitAuth(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
 
-    if (!session) {
-      return setAuthDialog(true)
-    }
-
     if (isLoading) {
       stop()
     }
@@ -200,17 +165,11 @@ export default function Home() {
       template: currentTemplate,
       model: currentModel,
       config: languageModel,
-      ...(shouldUseMorph && fragment ? { currentFragment: fragment } : {}),
-    })
+          })
 
     setChatInput('')
     setFiles([])
     setCurrentTab('code')
-
-    posthog.capture('chat_submit', {
-      template: selectedTemplate,
-      model: languageModel.model,
-    })
   }
 
   function retry() {
@@ -221,8 +180,7 @@ export default function Home() {
       template: currentTemplate,
       model: currentModel,
       config: languageModel,
-      ...(shouldUseMorph && fragment ? { currentFragment: fragment } : {}),
-    })
+          })
   }
 
   function addMessage(message: Message) {
@@ -239,28 +197,22 @@ export default function Home() {
   }
 
   function logout() {
-    supabase
-      ? supabase.auth.signOut()
-      : console.warn('Supabase is not initialized')
+    // TODO: Implement logout with Better Auth
+    console.log('Logout called')
   }
 
-  function handleLanguageModelChange(e: LLMModelConfig) {
-    setLanguageModel({ ...languageModel, ...e })
-  }
 
   function handleSocialClick(target: 'github' | 'x' | 'discord') {
     if (target === 'github') {
-      window.open('https://github.com/e2b-dev/fragments', '_blank')
+      window.open('https://github.com/palmframe/palmframe', '_blank')
     } else if (target === 'x') {
-      window.open('https://x.com/e2b', '_blank')
+      window.open('https://x.com/palmframe', '_blank')
     } else if (target === 'discord') {
-      window.open('https://discord.gg/e2b', '_blank')
+      window.open('https://discord.gg/palmframe', '_blank')
     }
-
-    posthog.capture(`${target}_click`)
   }
 
-  function handleClearChat() {
+  async function handleClearChat() {
     stop()
     setChatInput('')
     setFiles([])
@@ -269,6 +221,11 @@ export default function Home() {
     setResult(undefined)
     setCurrentTab('code')
     setIsPreviewLoading(false)
+
+    // Create a new session
+    if (currentProjectId) {
+      await createNewSession(currentProjectId, 'New Chat')
+    }
   }
 
   function setCurrentPreview(preview: {
@@ -284,23 +241,57 @@ export default function Home() {
     setCurrentPreview({ fragment: undefined, result: undefined })
   }
 
+  // Load session messages when session changes
+  useEffect(() => {
+    async function loadSession() {
+      if (!currentSessionId) {
+        // No session - create one if we have a project
+        if (currentProjectId) {
+          await createNewSession(currentProjectId, 'New Chat')
+          // Session will be set in context, which will trigger this effect again
+        }
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/sessions/${currentSessionId}`)
+        const data = await response.json()
+
+        if (data.messages) {
+          setMessages(data.messages)
+
+          // Load last fragment if present
+          const lastMessageWithFragment = data.messages
+            .reverse()
+            .find((m: Message) => m.object || m.result)
+
+          if (lastMessageWithFragment) {
+            setFragment(lastMessageWithFragment.object)
+            setResult(lastMessageWithFragment.result)
+            setCurrentTab('fragment')
+          } else {
+            setFragment(undefined)
+            setResult(undefined)
+            setCurrentTab('code')
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load session:', error)
+      }
+    }
+
+    loadSession()
+  }, [currentSessionId, currentProjectId, createNewSession])
+
   return (
     <main className="flex min-h-screen max-h-screen">
-      {supabase && (
-        <AuthDialog
-          open={isAuthDialogOpen}
-          setOpen={setAuthDialog}
-          view={authView}
-          supabase={supabase}
-        />
-      )}
+      <Sidebar />
       <div className="grid w-full md:grid-cols-2">
         <div
           className={`flex flex-col w-full max-h-full max-w-[800px] mx-auto px-4 overflow-auto ${fragment ? 'col-span-1' : 'col-span-2'}`}
         >
           <NavBar
             session={session}
-            showLogin={() => setAuthDialog(true)}
             signOut={logout}
             onSocialClick={handleSocialClick}
             onClear={handleClearChat}
@@ -331,17 +322,6 @@ export default function Home() {
               templates={templates}
               selectedTemplate={selectedTemplate}
               onSelectedTemplateChange={setSelectedTemplate}
-              models={filteredModels}
-              languageModel={languageModel}
-              onLanguageModelChange={handleLanguageModelChange}
-            />
-            <ChatSettings
-              languageModel={languageModel}
-              onLanguageModelChange={handleLanguageModelChange}
-              apiKeyConfigurable={!process.env.NEXT_PUBLIC_NO_API_KEY_INPUT}
-              baseURLConfigurable={!process.env.NEXT_PUBLIC_NO_BASE_URL_INPUT}
-              useMorphApply={useMorphApply}
-              onUseMorphApplyChange={setUseMorphApply}
             />
           </ChatInput>
         </div>

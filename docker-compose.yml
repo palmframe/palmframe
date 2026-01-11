@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: palmframe-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: palmframe
+      POSTGRES_USER: palmframe
+      POSTGRES_PASSWORD: palmframe_dev_password
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U palmframe']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - palmframe-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: palmframe-app
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://palmframe:palmframe_dev_password@postgres:5432/palmframe
+      - E2B_API_KEY=${E2B_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-10}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - palmframe-network
+
+volumes:
+  postgres_data:
+
+networks:
+  palmframe-network:
+    driver: bridge

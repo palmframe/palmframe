@@ -1,17 +1,24 @@
-import { kv } from '@vercel/kv'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { db } from './lib/db'
+import { shortUrls } from './lib/db/schema'
+import { eq } from 'drizzle-orm'
 
 export async function middleware(req: NextRequest) {
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const id = req.nextUrl.pathname.split('/').pop()
-    const url = await kv.get(`fragment:${id}`)
+  const id = req.nextUrl.pathname.split('/').pop()
 
-    if (url) {
-      return NextResponse.redirect(url as string)
-    } else {
-      return NextResponse.redirect(new URL('/', req.url))
-    }
+  if (!id) {
+    return NextResponse.redirect(new URL('/', req.url))
+  }
+
+  const result = await db
+    .select()
+    .from(shortUrls)
+    .where(eq(shortUrls.id, id))
+    .limit(1)
+
+  if (result.length > 0 && result[0].url) {
+    return NextResponse.redirect(result[0].url)
   }
 
   return NextResponse.redirect(new URL('/', req.url))

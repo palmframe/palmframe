@@ -8,7 +8,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
-import { SupabaseClient } from '@supabase/supabase-js'
 
 export function AuthDialog({
   open,
@@ -18,7 +17,7 @@ export function AuthDialog({
 }: {
   open: boolean
   setOpen: (open: boolean) => void
-  supabase: SupabaseClient
+  supabase: any
   view: ViewType
 }) {
   return (

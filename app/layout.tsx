@@ -1,15 +1,15 @@
 import './globals.css'
-import { PostHogProvider, ThemeProvider } from './providers'
+import { ThemeProvider } from './providers'
+import { WorkspaceProvider } from '@/lib/contexts/workspace-context'
 import { Toaster } from '@/components/ui/toaster'
-import { Analytics } from '@vercel/analytics/next'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Fragments by E2B',
-  description: "Open-source version of Anthropic's Artifacts",
+  title: 'Palmframe - AI Agents at Work',
+  description: 'Open source platform to put your AI agents to work',
 }
 
 export default function RootLayout({
@@ -19,20 +19,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <PostHogProvider>
-        <body className={inter.className}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="dark"
-            enableSystem
-            disableTransitionOnChange
-          >
+      <body className={inter.className}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <WorkspaceProvider>
             {children}
-          </ThemeProvider>
-          <Toaster />
-          <Analytics />
-        </body>
-      </PostHogProvider>
+          </WorkspaceProvider>
+        </ThemeProvider>
+        <Toaster />
+      </body>
     </html>
   )
 }
