@@ -2,6 +2,18 @@
 
 import React, { createContext, useState, useEffect, useCallback } from 'react'
 import type { Project, ChatSession } from '@/lib/db/types'
+import {
+  getProjects,
+  createNewProject as createProjectAction,
+  updateProjectAction,
+  deleteProjectAction,
+} from '@/app/actions/projects'
+import {
+  getSessions,
+  createNewSession as createSessionAction,
+  updateSessionAction,
+  deleteSessionAction,
+} from '@/app/actions/sessions'
 
 export interface WorkspaceContextType {
   currentProjectId: string | null
@@ -33,8 +45,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // Load projects on mount
   const refreshProjects = useCallback(async () => {
     try {
-      const response = await fetch('/api/projects')
-      const data = await response.json()
+      const data = await getProjects()
       setProjects(data.projects || [])
 
       // Set current project if not set
@@ -52,8 +63,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // Load sessions for a project
   const refreshSessions = useCallback(async (projectId: string) => {
     try {
-      const response = await fetch(`/api/sessions?projectId=${projectId}`)
-      const data = await response.json()
+      const data = await getSessions(projectId)
       setSessions(data.sessions || [])
     } catch (error) {
       console.error('Failed to load sessions:', error)
@@ -68,8 +78,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
     // Load stored session for this project or select first
     const storedSessionId = localStorage.getItem(`currentSessionId_${projectId}`)
-    const response = await fetch(`/api/sessions?projectId=${projectId}`)
-    const data = await response.json()
+    const data = await getSessions(projectId)
     const sessionToUse = data.sessions.find((s: ChatSession) => s.id === storedSessionId) || data.sessions[0]
 
     if (sessionToUse) {
@@ -90,31 +99,21 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Create new project
   const createNewProject = useCallback(async (name: string, description?: string): Promise<Project> => {
-    const response = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description }),
-    })
-    const data = await response.json()
+    const data = await createProjectAction(name, description)
     await refreshProjects()
     return data.project
   }, [refreshProjects])
 
   // Create new session
   const createNewSession = useCallback(async (projectId: string, name: string): Promise<ChatSession> => {
-    const response = await fetch('/api/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, name }),
-    })
-    const data = await response.json()
+    const data = await createSessionAction(projectId, name)
     await refreshSessions(projectId)
     return data.session
   }, [refreshSessions])
 
   // Delete project
   const deleteProject = useCallback(async (projectId: string) => {
-    await fetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+    await deleteProjectAction(projectId)
     await refreshProjects()
 
     // If deleted project was current, switch to first available
@@ -128,7 +127,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Delete session
   const deleteSession = useCallback(async (sessionId: string) => {
-    await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' })
+    await deleteSessionAction(sessionId)
 
     if (currentProjectId) {
       await refreshSessions(currentProjectId)
@@ -147,21 +146,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Rename project
   const renameProject = useCallback(async (projectId: string, name: string) => {
-    await fetch(`/api/projects/${projectId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
+    await updateProjectAction(projectId, name)
     await refreshProjects()
   }, [refreshProjects])
 
   // Rename session
   const renameSession = useCallback(async (sessionId: string, name: string) => {
-    await fetch(`/api/sessions/${sessionId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
+    await updateSessionAction(sessionId, name)
 
     if (currentProjectId) {
       await refreshSessions(currentProjectId)

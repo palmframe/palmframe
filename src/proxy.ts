@@ -4,7 +4,7 @@ import { db } from './lib/db'
 import { shortUrls } from './lib/db/schema'
 import { eq } from 'drizzle-orm'
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const id = req.nextUrl.pathname.split('/').pop()
 
   if (!id) {

@@ -12,7 +12,7 @@ Join **The Palmframe Computer Club** - our community of builders.
 
 ## Features
 
-- **Next.js 14** (App Router, Server Actions) with shadcn/ui and TailwindCSS
+- **Next.js 16** (App Router, Server Actions, React 19) with shadcn/ui and TailwindCSS
 - **Mistral AI** - Uses Devstral for code generation
 - **Flexible Sandbox Providers** - Choose between E2B or Daytona for secure code execution
   - **E2B SDK** - Production-ready sandboxed environments

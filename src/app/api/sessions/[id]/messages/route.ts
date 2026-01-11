@@ -10,7 +10,7 @@ import { Message } from '@/lib/messages'
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userSession = getSession(req)
@@ -19,7 +19,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const sessionId = params.id
+    const { id: sessionId } = await params
 
     // Verify session exists
     const chatSession = await getSessionById(sessionId)
