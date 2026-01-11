@@ -1,0 +1,7 @@
+node_modules
+.git
+.env
+*.log
+.DS_Store
+README.md
+build-images.sh

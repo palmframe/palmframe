@@ -27,6 +27,17 @@ export async function publish(
     if (!parsedUrl.hostname.endsWith('.daytona.app')) {
       throw new Error('URL must be on *.daytona.app domain')
     }
+  } else if (provider === 'docker') {
+    // Docker allows localhost or custom DOCKER_HOST
+    const allowedHosts = ['localhost', '127.0.0.1', '0.0.0.0']
+    const dockerHost = process.env.DOCKER_HOST?.replace(/^tcp:\/\//, '').split(':')[0]
+    if (dockerHost) {
+      allowedHosts.push(dockerHost)
+    }
+
+    if (!allowedHosts.some((host) => parsedUrl.hostname === host || parsedUrl.hostname.includes(host))) {
+      throw new Error(`URL must be on allowed Docker hosts: ${allowedHosts.join(', ')}`)
+    }
   }
 
   const expiration = ms(duration)
